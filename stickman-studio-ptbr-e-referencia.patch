@@ -1,5 +1,5 @@
 diff --git a/.env.example b/.env.example
-index e39906e..a0a2281 100644
+index e39906e..3918bb5 100644
 --- a/.env.example
 +++ b/.env.example
 @@ -28,3 +28,25 @@ VIDEO_SECONDS=5          # 4-5s per clip
@@ -24,10 +24,10 @@ index e39906e..a0a2281 100644
 +CHARACTER_SUBJECT_DESCRIPTION=a hand-drawn black line-art stickman man with short tousled spiky hair, an expressive face (eyes, eyebrows, nose, mouth), wearing a short-sleeved collared shirt and a necktie, thin stick arms and legs, monochrome black ink lines, no color fills
 +# Negative prompt override. The project default forbids clothing/hair/detail,
 +# which fights Anderson — this loosened version keeps line-art but allows him.
-+CHARACTER_NEGATIVE_PROMPT=color fills, photorealistic, 3d render, shadows, gradients, text, watermark, clutter, extra characters, background scenery clutter
-+# Per-scene style constraints. Kept as clean black line art on white to match
-+# the reference while letting the character's hair/face/outfit through.
-+CHARACTER_STYLE_CONSTRAINTS=hand-drawn black ink line art, monochrome, clean plain background, no color fills, no shading, no gradients
++CHARACTER_NEGATIVE_PROMPT=colorful character, saturated colors, photorealistic, 3d render, shadows, gradients, text, watermark, clutter, extra characters, background scenery clutter
++# Per-scene style constraints. Black ink line art on a solid CREAM background to
++# match the Anderson reference, while letting his hair/face/outfit through.
++CHARACTER_STYLE_CONSTRAINTS=hand-drawn black ink line art, monochrome line work, solid cream / warm off-white background, flat, no shading, no gradients
 diff --git a/requirements.txt b/requirements.txt
 index c5ace76..7797199 100644
 --- a/requirements.txt

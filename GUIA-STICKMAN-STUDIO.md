@@ -197,6 +197,8 @@ Como o Anderson é um stickman detalhado (cabelo/rosto/roupa), o patch agora:
   art stickman, simple round head". Como a **identidade** é garantida pela imagem
   de referência, isso não quebra a consistência — mas se quiser que o roteiro
   descreva o Anderson explicitamente (gestos com a gravata etc.), dá pra ajustar.
-- **Fundo:** o Anderson é sobre creme; as cenas saem em fundo branco/limpo por
-  padrão. Para fundo creme nas cenas, troque `CHARACTER_STYLE_CONSTRAINTS` para
-  incluir `... cream background ...`.
+- **Fundo:** configurado para **creme** (casando com a arte do Anderson) via
+  `CHARACTER_STYLE_CONSTRAINTS`. O `CHARACTER_NEGATIVE_PROMPT` bloqueia só cores
+  no personagem (`colorful character, saturated colors`), deixando o fundo creme
+  passar. Para voltar a fundo branco, troque `solid cream / warm off-white
+  background` por `plain white background`.
