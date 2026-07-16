@@ -1,0 +1,48 @@
+{
+  "topic": "Rotativo do cartao de credito",
+  "slug": "rotativo_do_cartao_de_credito",
+  "script": "Você paga só o mínimo do cartão e acha que tá tudo certo? Esse é o começo do surto. O que você não paga vira 'rotativo' — o crédito mais caro que existe, com juros de até 15% ao mês. Aí a conta vira bola de neve: uma dívida de 500 reais não para de crescer. Em um ano, sem quitar, ela quase triplica. Não é azar, é matemática. A saída? Troque essa dívida por um empréstimo mais barato e nunca mais pague só o mínimo. Se esse vídeo te salvou de um surto, segue o Anderson Patrimônio.",
+  "character_reference_prompt": "Anderson Patrimônio: a hand-drawn black ink line-art stickman man with short spiky tousled hair, a simple expressive face (round eyes, worried eyebrows, small nose, expressive mouth), wearing a short-sleeved collared shirt and a necktie, thin stick arms and legs, monochrome black lines on a solid cream / warm off-white background, flat, no shading, no color.",
+  "scenes": [
+    {
+      "index": 0,
+      "title": "The Hook — Shock at the Bill",
+      "scene_prompt": "stands frozen holding a comically oversized credit-card bill, eyes huge and jaw dropped, sweat drops flying off his head, a couple of coins spilling off the edge of the paper",
+      "narration": "Você paga só o mínimo do cartão e acha que tá tudo certo? Esse é o começo do surto.",
+      "image_path": null,
+      "video_path": null
+    },
+    {
+      "index": 1,
+      "title": "The Trap — O Rotativo",
+      "scene_prompt": "points nervously at a tiny pile of coins in his open hand while a large dark swirling storm cloud grows behind his back, his necktie flipping upward, glancing over his shoulder",
+      "narration": "O que você não paga vira 'rotativo' — o crédito mais caro que existe, com juros de até 15% ao mês.",
+      "image_path": null,
+      "video_path": null
+    },
+    {
+      "index": 2,
+      "title": "The Snowball",
+      "scene_prompt": "runs forward in panic with arms flailing, chased by a giant rolling snowball made of crumpled bills and coins that is bigger than he is",
+      "narration": "Aí a conta vira bola de neve: uma dívida de 500 reais não para de crescer.",
+      "image_path": null,
+      "video_path": null
+    },
+    {
+      "index": 3,
+      "title": "The Math Explosion",
+      "scene_prompt": "jaw dropped and head tilted up, staring at a steep line-graph arrow rocketing sharply upward and shooting off the top edge of the frame",
+      "narration": "Em um ano, sem quitar, ela quase triplica. Não é azar, é matemática.",
+      "image_path": null,
+      "video_path": null
+    },
+    {
+      "index": 4,
+      "title": "The Way Out",
+      "scene_prompt": "smiles calmly and relieved, cutting an oversized credit card in half with big scissors, a simple check-mark shape floating above his head, shoulders relaxed",
+      "narration": "A saída? Troque essa dívida por um empréstimo mais barato e nunca mais pague só o mínimo. Se esse vídeo te salvou de um surto, segue o Anderson Patrimônio.",
+      "image_path": null,
+      "video_path": null
+    }
+  ]
+}

@@ -1,8 +1,24 @@
 diff --git a/.env.example b/.env.example
-index e39906e..e8ace73 100644
+index e39906e..b4b8d62 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -28,3 +28,27 @@ VIDEO_SECONDS=5          # 4-5s per clip
+@@ -20,11 +20,41 @@ GCS_STAGING_BUCKET=my-stickman-staging-bucket
+ GEMINI_MODEL=gemini-1.5-pro-002
+ IMAGEN_GENERATE_MODEL=imagen-3.0-generate-002
+ IMAGEN_CAPABILITY_MODEL=imagen-3.0-capability-001
+-VEO_MODEL=veo-2.0-generate-001
++# Veo 3 (requires allowlist access on your project). veo-3.0-fast-generate-001
++# is cheaper/faster; veo-3.0-generate-001 is higher quality. Veo 3 renders ~8s
++# clips and can generate NATIVE AUDIO — see VEO_GENERATE_AUDIO below.
++VEO_MODEL=veo-3.0-generate-001
+ 
+ # --- Generation tuning ---
+ SCENE_COUNT=5            # number of scenes to break the script into
+-VIDEO_SECONDS=5          # 4-5s per clip
++VIDEO_SECONDS=8          # Veo 3 renders ~8s clips (capped 4-8)
++VEO_GENERATE_AUDIO=0     # 0 = silent Veo clips (we add pt-BR narration ourselves); 1 = Veo native audio/SFX
++# Optional: override the Veo motion/style instruction wrapped around each scene.
++# VIDEO_MOTION_STYLE=Keep the hand-drawn black-line-art style on a cream background; gentle camera, subtle movement
  RETRY_MAX_ATTEMPTS=6     # auto-retry attempts on rate limit / transient errors
  RETRY_BASE_DELAY=4       # seconds; exponential backoff base
  LOG_LEVEL=INFO
@@ -263,6 +279,52 @@ index 41349d8..adc9b99 100644
          add_watermark=False,
      )
  
+diff --git a/stickman_studio/phases/phase3_video.py b/stickman_studio/phases/phase3_video.py
+index d347eb7..204802b 100644
+--- a/stickman_studio/phases/phase3_video.py
++++ b/stickman_studio/phases/phase3_video.py
+@@ -13,6 +13,7 @@ Output: MP4 files in projects/<slug>/videos/, recorded on each Scene.
+ from __future__ import annotations
+ 
+ import logging
++import os
+ import time
+ from pathlib import Path
+ 
+@@ -48,6 +49,15 @@ def _submit(client, image_path: Path, motion_prompt: str):
+         person_generation="allow_adult",
+         enhance_prompt=True,
+     )
++    # Veo 3 can synthesize native audio. We add our own pt-BR narration in the
++    # assembly phase, so default this OFF to avoid double audio. Set
++    # VEO_GENERATE_AUDIO=1 to let Veo 3 add ambient sound/SFX. Ignored by the
++    # SDK / Veo 2 if the field isn't supported.
++    gen_audio = os.getenv("VEO_GENERATE_AUDIO", "0").strip().lower() not in ("", "0", "false", "no")
++    try:
++        config.generate_audio = gen_audio
++    except Exception:
++        log.debug("generate_audio not supported by this SDK/model; ignoring.")
+     # Stage outputs to GCS when a bucket is configured (recommended for Veo).
+     if settings.gcs_staging_bucket:
+         config.output_gcs_uri = f"gs://{settings.gcs_staging_bucket}/veo_out/"
+@@ -131,10 +141,14 @@ def run(board: StoryBoard, project_dir: Path) -> StoryBoard:
+         log.info("Phase 3 (Veo): animating scene %d/%d — %s",
+                  scene.index + 1, len(board.scenes), scene.title)
+ 
++        motion_style = os.getenv("VIDEO_MOTION_STYLE", "").strip() or (
++            "Keep the hand-drawn black-line-art style on a cream background; "
++            "gentle camera, subtle character movement, preserve the character's "
++            "identity, hairstyle, face and outfit."
++        )
+         motion_prompt = (
+-            f"Animate this minimalist stickman scene with subtle, smooth motion. "
+-            f"{scene.scene_prompt}. Keep the clean black-line-on-white style; "
+-            f"gentle camera, simple character movement."
++            f"Animate this hand-drawn stickman scene with subtle, smooth motion. "
++            f"{scene.scene_prompt}. {motion_style}"
+         )
+ 
+         operation = _submit(client, Path(scene.image_path), motion_prompt)
 diff --git a/tts_engine.py b/tts_engine.py
 index 8612d18..384a81c 100644
 --- a/tts_engine.py
