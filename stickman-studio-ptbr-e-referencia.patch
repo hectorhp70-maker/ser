@@ -1,0 +1,172 @@
+diff --git a/.env.example b/.env.example
+index e39906e..01c6a14 100644
+--- a/.env.example
++++ b/.env.example
+@@ -28,3 +28,18 @@ VIDEO_SECONDS=5          # 4-5s per clip
+ RETRY_MAX_ATTEMPTS=6     # auto-retry attempts on rate limit / transient errors
+ RETRY_BASE_DELAY=4       # seconds; exponential backoff base
+ LOG_LEVEL=INFO
++
++# --- Narration (edge-tts, local & free) ---
++# Brazilian-Portuguese neural voice. List all voices: `edge-tts --list-voices`.
++# Options: pt-BR-AntonioNeural (male), pt-BR-FranciscaNeural / pt-BR-ThalitaNeural (female).
++TTS_VOICE=pt-BR-AntonioNeural
++TTS_RATE=+0%             # speed, e.g. -10% (slower) or +15% (faster)
++TTS_PITCH=+0Hz           # pitch, e.g. -20Hz (lower) or +20Hz (higher)
++
++# --- Character reference (visual identity) ---
++# Point this at a local image (e.g. the "Anderson Patrimônio" export from Canva)
++# to make Imagen keep that exact character across every scene. Leave blank to
++# have Imagen generate a stickman reference from the Gemini prompt instead.
++CHARACTER_REFERENCE_IMAGE=/absolute/path/to/anderson_patrimonio.png
++# Short description of the referenced subject, used by Imagen subject-customization.
++CHARACTER_SUBJECT_DESCRIPTION=a friendly Brazilian male cartoon character named Anderson, consistent face and outfit
+diff --git a/requirements.txt b/requirements.txt
+index c5ace76..7797199 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -16,3 +16,6 @@ rich>=13.7.1                     # pretty logs / progress
+ 
+ # ---- Media handling ----
+ Pillow>=10.4.0                   # image validation / thumbnails
++
++# ---- Narration (local, free) ----
++edge-tts>=6.1.9                  # Microsoft Edge neural TTS (pt-BR voices), used by tts_engine.py
+diff --git a/stickman_studio/phases/phase2_images.py b/stickman_studio/phases/phase2_images.py
+index 41349d8..02b0f95 100644
+--- a/stickman_studio/phases/phase2_images.py
++++ b/stickman_studio/phases/phase2_images.py
+@@ -51,6 +51,32 @@ def _generate_reference(prompt: str):
+ 
+ 
+ def _make_reference(board: StoryBoard, images_dir: Path) -> Path:
++    """Provide the canonical character reference image.
++
++    If CHARACTER_REFERENCE_IMAGE points to an existing file (e.g. the
++    "Anderson Patrimônio" artwork exported from Canva), that image is used
++    verbatim as the reference so every scene keeps the same character —
++    no Imagen generation of the reference happens. Otherwise Imagen 3
++    generates a reference from ``board.character_reference_prompt``.
++    """
++    ref_path = images_dir / "character_reference.png"
++
++    fixed = os.getenv("CHARACTER_REFERENCE_IMAGE", "").strip()
++    if fixed:
++        src = Path(fixed).expanduser()
++        if not src.is_file():
++            raise FileNotFoundError(
++                f"CHARACTER_REFERENCE_IMAGE points to a missing file: {src}"
++            )
++        # Copy into the project's images dir so downstream steps find it at
++        # the canonical path regardless of the source location/extension.
++        import shutil
++
++        shutil.copyfile(src, ref_path)
++        log.info("Phase 2A: using fixed character reference %s -> %s",
++                 src, ref_path)
++        return ref_path
++
+     log.info("Phase 2A (Imagen 3): generating character reference image")
+     prompt = (
+         f"{board.character_reference_prompt}. "
+@@ -59,7 +85,6 @@ def _make_reference(board: StoryBoard, images_dir: Path) -> Path:
+         "simple, no color, vector style, lots of negative space."
+     )
+     images = _generate_reference(prompt)
+-    ref_path = images_dir / "character_reference.png"
+     images[0].save(location=str(ref_path), include_generation_parameters=False)
+     log.info("Character reference saved -> %s", ref_path)
+     return ref_path
+@@ -78,13 +103,14 @@ def _generate_scene_with_reference(scene_prompt: str, ref_path: Path):
+     )
+ 
+     model = ImageGenerationModel.from_pretrained(settings.imagen_capability_model)
++    subject_description = os.getenv("CHARACTER_SUBJECT_DESCRIPTION", "").strip() or (
++        "a minimalist black line art stickman figure with a simple round head, "
++        "thin stick body and limbs, no color, no shading, no clothing, no details"
++    )
+     ref = SubjectReferenceImage(
+         reference_id=1,
+         image=Image.load_from_file(str(ref_path)),
+-        subject_description=(
+-            "a minimalist black line art stickman figure with a simple round head, "
+-            "thin stick body and limbs, no color, no shading, no clothing, no details"
+-        ),
++        subject_description=subject_description,
+         subject_type="SUBJECT_TYPE_PERSON",
+     )
+     full_prompt = (
+diff --git a/tts_engine.py b/tts_engine.py
+index 8612d18..384a81c 100644
+--- a/tts_engine.py
++++ b/tts_engine.py
+@@ -9,24 +9,42 @@ from __future__ import annotations
+ 
+ import asyncio
+ import logging
++import os
+ from pathlib import Path
+ 
+ log = logging.getLogger("stickman_studio.tts")
+ 
+-_DEFAULT_VOICE = "en-US-JennyNeural"
++# Brazilian-Portuguese neural voice by default. Override via the TTS_VOICE
++# env var (e.g. in .env). Good pt-BR options from `edge-tts --list-voices`:
++#   pt-BR-AntonioNeural   (male, warm — good fit for "Anderson Patrimônio")
++#   pt-BR-FranciscaNeural (female)
++#   pt-BR-ThalitaNeural   (female)
++_DEFAULT_VOICE = "pt-BR-AntonioNeural"
++
++# Optional prosody tuning. edge-tts accepts +/-N% for rate/volume and
++# +/-NHz for pitch. Leave at the neutral defaults unless you need to tweak.
++_DEFAULT_RATE = "+0%"
++_DEFAULT_PITCH = "+0Hz"
+ 
+ 
+ class TTSEngine:
+     """Generates narration audio using Edge-TTS (local, free).
+ 
+     Uses Microsoft Edge's neural TTS voices. No cloud API calls needed.
++    The voice and prosody default to Brazilian Portuguese and can be
++    overridden per-instance or via the TTS_VOICE / TTS_RATE / TTS_PITCH
++    environment variables.
+     """
+ 
+     def __init__(
+         self,
+-        voice: str = _DEFAULT_VOICE,
++        voice: str | None = None,
++        rate: str | None = None,
++        pitch: str | None = None,
+     ) -> None:
+-        self._voice = voice
++        self._voice = voice or os.getenv("TTS_VOICE", "").strip() or _DEFAULT_VOICE
++        self._rate = rate or os.getenv("TTS_RATE", "").strip() or _DEFAULT_RATE
++        self._pitch = pitch or os.getenv("TTS_PITCH", "").strip() or _DEFAULT_PITCH
+ 
+     def synthesize_speech(self, text: str, output_path: str | Path) -> Path:
+         """Synthesise text into an MP3 file via edge-tts.
+@@ -44,13 +62,21 @@ class TTSEngine:
+         output.parent.mkdir(parents=True, exist_ok=True)
+ 
+         async def _do() -> None:
+-            communicate = edge_tts.Communicate(text, self._voice)
++            communicate = edge_tts.Communicate(
++                text,
++                self._voice,
++                rate=self._rate,
++                pitch=self._pitch,
++            )
+             await communicate.save(str(output))
+ 
+         asyncio.run(_do())
+ 
+         size = output.stat().st_size
+-        log.info("TTS: %d bytes -> %s  (voice=%s)", size, output, self._voice)
++        log.info(
++            "TTS: %d bytes -> %s  (voice=%s, rate=%s, pitch=%s)",
++            size, output, self._voice, self._rate, self._pitch,
++        )
+         return output
+ 
+     def generate_per_scene_audio(
