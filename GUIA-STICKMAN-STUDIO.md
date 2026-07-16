@@ -162,22 +162,41 @@ Ele confirma o acesso a Gemini/Imagen/Veo com as credenciais do `.env`.
 
 ## 5. Anderson Patrimônio — referência visual do personagem
 
-O pipeline original **gera** um stickman via Imagen. Com o patch, se você definir
-`CHARACTER_REFERENCE_IMAGE`, ele passa a **usar a sua arte do Anderson** como
-referência fixa, mantendo o mesmo personagem em todas as cenas (via
-subject-customization do Imagen 3 capability model).
+Acessei o design no Canva (`DAHPilbjiBM` — "Surto Financeiro Stickman with Open
+Arms on Cream"). O Anderson é um **stickman desenhado à mão, traço preto sobre
+fundo creme**, com **cabelo espetado, rosto expressivo (expressão preocupada),
+camisa de colarinho + gravata** e braços abertos. Ou seja: é line art
+monocromático (combina com o projeto), mas **mais detalhado** que o stickman
+"cabeça redonda sem detalhes" que o código assumia por padrão.
 
-Para eu ajustar os prompts/descrição com precisão, **me envie a imagem do Anderson
-Patrimônio** (ou o link do Canva / a descrição visual: cor de pele, cabelo, roupa,
-estilo — cartoon flat? traço? paleta?). Com a imagem em mãos eu:
-- calibro o `CHARACTER_SUBJECT_DESCRIPTION`,
-- ajusto o `_NEGATIVE` em `phase2_images.py` (hoje ele proíbe cor/roupa/detalhe,
-  o que **conflita** com um personagem colorido — precisa afrouxar para o Anderson),
-- e reviso o system prompt do Gemini em `phase1_script.py`, que hoje instrui
-  "minimalist black line art stickman" (isso também precisa mudar para o Anderson).
+### Baixar o PNG do Anderson (export do Canva)
+Exportei o design em PNG (qualidade pro, fundo transparente). Baixe pelo navegador
+e salve localmente (o link expira em ~10h; se expirar, eu gero outro):
 
-> ⚠️ Ponto de atenção honesto: o projeto inteiro é modelado para **stickman
-> preto-e-branco minimalista** (prompts, negative prompts, instrução do Gemini).
-> Trocar para um personagem de marca colorido não é só apontar a imagem — os
-> prompts de estilo brigam com isso. O patch abre o mecanismo; a calibragem fina
-> dos prompts eu faço quando você me mandar a referência.
+```
+https://export-download.canva.com/bjiBM/DAHPilbjiBM/-1/0/0001-3860094548993545421.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAQYCGKMUH5AO7UJ26%2F20260716%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260716T015726Z&X-Amz-Expires=35634&X-Amz-Signature=6bf8f269e715776346fe8148ec3e6f28ea6049ccd03459898c376bbe03300093&X-Amz-SignedHeaders=host%3Bx-amz-expected-bucket-owner&response-expires=Thu%2C%2016%20Jul%202026%2011%3A51%3A20%20GMT
+```
+Salve como, por exemplo, `~/stickman/anderson_patrimonio.png` e aponte no `.env`:
+```dotenv
+CHARACTER_REFERENCE_IMAGE=/Users/voce/stickman/anderson_patrimonio.png
+```
+
+### Calibragem já aplicada no patch
+Como o Anderson é um stickman detalhado (cabelo/rosto/roupa), o patch agora:
+- **`CHARACTER_SUBJECT_DESCRIPTION`** → descreve o Anderson de fato (cabelo espetado,
+  rosto expressivo, camisa + gravata, traço preto monocromático).
+- **`CHARACTER_NEGATIVE_PROMPT`** (override novo) → afrouxa o negative prompt, que
+  antes proibia `clothing`/`detailed illustration`/`shading` e brigava com ele.
+- **`CHARACTER_STYLE_CONSTRAINTS`** (override novo) → mantém "black ink line art
+  monocromático", mas deixa passar cabelo/rosto/roupa.
+- O prompt de cena agora reforça: *"manter a mesma identidade, cabelo, rosto e
+  roupa da referência"*.
+
+### O que ainda vale revisar (opcional)
+- `phase1_script.py` (Gemini): o system prompt ainda diz "minimalist black line
+  art stickman, simple round head". Como a **identidade** é garantida pela imagem
+  de referência, isso não quebra a consistência — mas se quiser que o roteiro
+  descreva o Anderson explicitamente (gestos com a gravata etc.), dá pra ajustar.
+- **Fundo:** o Anderson é sobre creme; as cenas saem em fundo branco/limpo por
+  padrão. Para fundo creme nas cenas, troque `CHARACTER_STYLE_CONSTRAINTS` para
+  incluir `... cream background ...`.

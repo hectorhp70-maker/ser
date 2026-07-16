@@ -1,8 +1,8 @@
 diff --git a/.env.example b/.env.example
-index e39906e..01c6a14 100644
+index e39906e..a0a2281 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -28,3 +28,18 @@ VIDEO_SECONDS=5          # 4-5s per clip
+@@ -28,3 +28,25 @@ VIDEO_SECONDS=5          # 4-5s per clip
  RETRY_MAX_ATTEMPTS=6     # auto-retry attempts on rate limit / transient errors
  RETRY_BASE_DELAY=4       # seconds; exponential backoff base
  LOG_LEVEL=INFO
@@ -14,13 +14,20 @@ index e39906e..01c6a14 100644
 +TTS_RATE=+0%             # speed, e.g. -10% (slower) or +15% (faster)
 +TTS_PITCH=+0Hz           # pitch, e.g. -20Hz (lower) or +20Hz (higher)
 +
-+# --- Character reference (visual identity) ---
-+# Point this at a local image (e.g. the "Anderson Patrimônio" export from Canva)
-+# to make Imagen keep that exact character across every scene. Leave blank to
-+# have Imagen generate a stickman reference from the Gemini prompt instead.
++# --- Character reference (visual identity) — "Anderson Patrimônio" ---
++# Point this at a local image (the Anderson Patrimônio export from Canva) to make
++# Imagen keep that exact character across every scene. Leave blank to have Imagen
++# generate a plain stickman reference from the Gemini prompt instead.
 +CHARACTER_REFERENCE_IMAGE=/absolute/path/to/anderson_patrimonio.png
-+# Short description of the referenced subject, used by Imagen subject-customization.
-+CHARACTER_SUBJECT_DESCRIPTION=a friendly Brazilian male cartoon character named Anderson, consistent face and outfit
++# Description of the referenced subject, used by Imagen subject-customization.
++# Anderson = a hand-drawn stickman with hair, an expressive face, shirt and tie.
++CHARACTER_SUBJECT_DESCRIPTION=a hand-drawn black line-art stickman man with short tousled spiky hair, an expressive face (eyes, eyebrows, nose, mouth), wearing a short-sleeved collared shirt and a necktie, thin stick arms and legs, monochrome black ink lines, no color fills
++# Negative prompt override. The project default forbids clothing/hair/detail,
++# which fights Anderson — this loosened version keeps line-art but allows him.
++CHARACTER_NEGATIVE_PROMPT=color fills, photorealistic, 3d render, shadows, gradients, text, watermark, clutter, extra characters, background scenery clutter
++# Per-scene style constraints. Kept as clean black line art on white to match
++# the reference while letting the character's hair/face/outfit through.
++CHARACTER_STYLE_CONSTRAINTS=hand-drawn black ink line art, monochrome, clean plain background, no color fills, no shading, no gradients
 diff --git a/requirements.txt b/requirements.txt
 index c5ace76..7797199 100644
 --- a/requirements.txt
@@ -33,10 +40,37 @@ index c5ace76..7797199 100644
 +# ---- Narration (local, free) ----
 +edge-tts>=6.1.9                  # Microsoft Edge neural TTS (pt-BR voices), used by tts_engine.py
 diff --git a/stickman_studio/phases/phase2_images.py b/stickman_studio/phases/phase2_images.py
-index 41349d8..02b0f95 100644
+index 41349d8..adc9b99 100644
 --- a/stickman_studio/phases/phase2_images.py
 +++ b/stickman_studio/phases/phase2_images.py
-@@ -51,6 +51,32 @@ def _generate_reference(prompt: str):
+@@ -28,7 +28,16 @@ from ..retry import with_retry
+ 
+ log = logging.getLogger("stickman_studio.phase2")
+ 
+-_NEGATIVE = "color, photorealistic, 3d render, shadows, gradients, text, watermark, clutter, realistic human, detailed illustration, astronaut, robot, animal, clothing, shading"
++# Default negative prompt for the pure minimalist-stickman mode. When a fixed
++# character reference is used (e.g. "Anderson Patrimônio": a hand-drawn stickman
++# with hair, a face, a shirt and a tie), that default fights the character, so
++# override it via the CHARACTER_NEGATIVE_PROMPT env var — see `_negative()`.
++_DEFAULT_NEGATIVE = "color, photorealistic, 3d render, shadows, gradients, text, watermark, clutter, realistic human, detailed illustration, astronaut, robot, animal, clothing, shading"
++
++
++def _negative() -> str:
++    """Negative prompt, overridable via CHARACTER_NEGATIVE_PROMPT."""
++    return os.getenv("CHARACTER_NEGATIVE_PROMPT", "").strip() or _DEFAULT_NEGATIVE
+ 
+ 
+ # --------------------------------------------------------------------------- #
+@@ -43,7 +52,7 @@ def _generate_reference(prompt: str):
+         prompt=prompt,
+         number_of_images=1,
+         aspect_ratio="16:9",
+-        negative_prompt=_NEGATIVE,
++        negative_prompt=_negative(),
+         add_watermark=False,
+         safety_filter_level="block_some",
+         person_generation="allow_adult",
+@@ -51,6 +60,32 @@ def _generate_reference(prompt: str):
  
  
  def _make_reference(board: StoryBoard, images_dir: Path) -> Path:
@@ -69,7 +103,7 @@ index 41349d8..02b0f95 100644
      log.info("Phase 2A (Imagen 3): generating character reference image")
      prompt = (
          f"{board.character_reference_prompt}. "
-@@ -59,7 +85,6 @@ def _make_reference(board: StoryBoard, images_dir: Path) -> Path:
+@@ -59,7 +94,6 @@ def _make_reference(board: StoryBoard, images_dir: Path) -> Path:
          "simple, no color, vector style, lots of negative space."
      )
      images = _generate_reference(prompt)
@@ -77,7 +111,7 @@ index 41349d8..02b0f95 100644
      images[0].save(location=str(ref_path), include_generation_parameters=False)
      log.info("Character reference saved -> %s", ref_path)
      return ref_path
-@@ -78,13 +103,14 @@ def _generate_scene_with_reference(scene_prompt: str, ref_path: Path):
+@@ -78,25 +112,32 @@ def _generate_scene_with_reference(scene_prompt: str, ref_path: Path):
      )
  
      model = ImageGenerationModel.from_pretrained(settings.imagen_capability_model)
@@ -95,7 +129,38 @@ index 41349d8..02b0f95 100644
 +        subject_description=subject_description,
          subject_type="SUBJECT_TYPE_PERSON",
      )
++    # Style constraints are overridable so a detailed reference character
++    # (hair, face, shirt, tie) isn't forced back to a "simple" stickman.
++    style = os.getenv("CHARACTER_STYLE_CONSTRAINTS", "").strip() or (
++        "clean black line art, simple, no color, plain white background, "
++        "vector style, lots of negative space, no shading, no gradients"
++    )
      full_prompt = (
+-        f"ACTION: The stickman figure {scene_prompt}."
+-        f" CONSTRAINTS: clean black line art, simple, no color, plain white background, "
+-        f"vector style, lots of negative space, no shading, no gradients."
++        f"ACTION: The character {scene_prompt}."
++        f" Keep the same character identity, hairstyle, facial features and outfit"
++        f" as the reference. CONSTRAINTS: {style}."
+     )
+     return model.edit_image(
+         prompt=full_prompt,
+         number_of_images=1,
+         reference_images=[ref],
+-        negative_prompt=_NEGATIVE,
++        negative_prompt=_negative(),
+     )
+ 
+ 
+@@ -115,7 +156,7 @@ def _generate_scene_prompt_only(ref_prompt: str, scene_prompt: str):
+         prompt=full_prompt,
+         number_of_images=1,
+         aspect_ratio="16:9",
+-        negative_prompt=_NEGATIVE,
++        negative_prompt=_negative(),
+         add_watermark=False,
+     )
+ 
 diff --git a/tts_engine.py b/tts_engine.py
 index 8612d18..384a81c 100644
 --- a/tts_engine.py
