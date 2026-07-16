@@ -1,8 +1,8 @@
 diff --git a/.env.example b/.env.example
-index e39906e..3918bb5 100644
+index e39906e..e8ace73 100644
 --- a/.env.example
 +++ b/.env.example
-@@ -28,3 +28,25 @@ VIDEO_SECONDS=5          # 4-5s per clip
+@@ -28,3 +28,27 @@ VIDEO_SECONDS=5          # 4-5s per clip
  RETRY_MAX_ATTEMPTS=6     # auto-retry attempts on rate limit / transient errors
  RETRY_BASE_DELAY=4       # seconds; exponential backoff base
  LOG_LEVEL=INFO
@@ -13,6 +13,8 @@ index e39906e..3918bb5 100644
 +TTS_VOICE=pt-BR-AntonioNeural
 +TTS_RATE=+0%             # speed, e.g. -10% (slower) or +15% (faster)
 +TTS_PITCH=+0Hz           # pitch, e.g. -20Hz (lower) or +20Hz (higher)
++# Language Gemini writes the narration in (must match TTS_VOICE's language!).
++NARRATION_LANGUAGE=Brazilian Portuguese (português do Brasil)
 +
 +# --- Character reference (visual identity) — "Anderson Patrimônio" ---
 +# Point this at a local image (the Anderson Patrimônio export from Canva) to make
@@ -39,6 +41,106 @@ index c5ace76..7797199 100644
 +
 +# ---- Narration (local, free) ----
 +edge-tts>=6.1.9                  # Microsoft Edge neural TTS (pt-BR voices), used by tts_engine.py
+diff --git a/stickman_studio/phases/phase1_script.py b/stickman_studio/phases/phase1_script.py
+index 4393396..d8c75c4 100644
+--- a/stickman_studio/phases/phase1_script.py
++++ b/stickman_studio/phases/phase1_script.py
+@@ -13,6 +13,7 @@ from __future__ import annotations
+ 
+ import json
+ import logging
++import os
+ from pathlib import Path
+ 
+ from ..config import settings, init_vertex
+@@ -22,6 +23,14 @@ from ..retry import with_retry
+ log = logging.getLogger("stickman_studio.phase1")
+ 
+ 
++def _narration_language() -> str:
++    """Language the narration script must be written in (default pt-BR)."""
++    return (
++        os.getenv("NARRATION_LANGUAGE", "").strip()
++        or "Brazilian Portuguese (português do Brasil)"
++    )
++
++
+ # The response schema forces Gemini to emit machine-parseable JSON.
+ _RESPONSE_SCHEMA = {
+     "type": "object",
+@@ -45,34 +54,49 @@ _RESPONSE_SCHEMA = {
+ }
+ 
+ 
+-_SYSTEM_INSTRUCTION = """
+-You are the Storyboard Architect for 'Stickman Studio', specializing in viral educational Shorts.
+-Your role is to transform scientific topics into highly engaging, fast-paced JSON storyboards.
++def _system_instruction() -> str:
++    lang = _narration_language()
++    return f"""
++You are the Storyboard Architect for 'Surto Financeiro', a channel of viral, funny
++educational Shorts hosted by a stickman character named **Anderson Patrimônio**.
++
++Anderson is a hand-drawn black-line-art stickman with short spiky hair, an expressive
++face, and always wearing a collared shirt and a necktie (a relatable "office guy" who
++panics about money — "surto financeiro"). He reacts with exaggerated emotion:
++worry, shock, relief, excitement.
+ 
+ Viral Content & Storytelling Guidelines:
+-1. THE HOOK (Scene 1): The first scene MUST start with a strong hook (a shocking fact, a weird question, or an extreme visual scenario). Never use boring introductions like "Today we will learn about...".
+-2. PACING: Narration sentences must be short, punchy, and conversational. Keep the energy high to retain attention.
+-3. VISUAL COMEDY: Leverage the stickman character for exaggerated physical situations in the `scene_prompt` (e.g., getting squished by a giant apple, floating off into space, running in panic). Keep actions highly dynamic.
++1. LANGUAGE: The `script` and every `narration` field MUST be written in {lang}.
++   Titles and `scene_prompt` fields stay in English (they drive the image model).
++2. THE HOOK (Scene 1): Open with a strong hook — a shocking fact, a weird question,
++   or an extreme visual. Never boring intros like "Hoje vamos aprender...".
++3. PACING: Narration must be short, punchy, conversational, high-energy.
++4. VISUAL COMEDY: Put Anderson in exaggerated physical situations in `scene_prompt`
++   (buried under a pile of bills, running from a giant credit card, jaw dropping at a
++   chart, sweating over a calculator). Keep actions dynamic and money-themed where it
++   fits the TOPIC.
+ 
+ Technical Constraints (CRITICAL):
+ - Output must be strict JSON.
+-- Style: Minimalist black line art, simple round head, thin limbs, no color, no shading.
+-- Storyboard structure must include: topic, slug, script, and a list of scenes.
+-- Each scene must contain: index, title, scene_prompt, narration.
+-- Do NOT include 'character_prompt' in the scene object (it is managed globally).
+-- Ensure `scene_prompt` focuses ONLY on the action and environment, omitting character identity rules.
++- Visual style: hand-drawn black ink line art, monochrome, cream background, no color.
++- Each scene must contain: title, scene_prompt, narration.
++- `scene_prompt` describes ONLY the action, props and environment — NOT the character's
++  identity/appearance (Anderson's look is enforced globally by the reference image).
++- Anderson keeps the SAME look in every scene; only his pose, expression and props change.
+ """
+ 
+ 
+ def _build_prompt(topic: str, scene_count: int) -> str:
++    lang = _narration_language()
+     return f"""TOPIC: "{topic}"
+ 
+ Produce:
+-1. A ~500-word narration SCRIPT, engaging and clear.
+-2. A CHARACTER REFERENCE PROMPT for the stickman.
++1. A ~500-word narration SCRIPT in {lang}, engaging and clear, in Anderson's voice.
++2. A CHARACTER REFERENCE PROMPT describing Anderson Patrimônio (stickman, spiky hair,
++   expressive face, collared shirt + necktie, black line art) — in English.
+ 3. Exactly {scene_count} SCENES.
+ 
+-Each scene: title, scene_prompt, narration."""
++Each scene: title (English), scene_prompt (English, action only), narration ({lang})."""
+ 
+ 
+ @with_retry
+@@ -99,7 +123,7 @@ def run(topic: str, project_dir: Path, scene_count: int | None = None) -> StoryB
+     scene_count = scene_count or settings.scene_count
+     log.info("Phase 1 (Gemini): generating script + %d scenes for '%s'", scene_count, topic)
+ 
+-    model = GenerativeModel(settings.gemini_model, system_instruction=_SYSTEM_INSTRUCTION)
++    model = GenerativeModel(settings.gemini_model, system_instruction=_system_instruction())
+     response = _generate(model, _build_prompt(topic, scene_count))
+ 
+     raw = response.text
 diff --git a/stickman_studio/phases/phase2_images.py b/stickman_studio/phases/phase2_images.py
 index 41349d8..adc9b99 100644
 --- a/stickman_studio/phases/phase2_images.py

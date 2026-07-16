@@ -192,11 +192,16 @@ Como o Anderson é um stickman detalhado (cabelo/rosto/roupa), o patch agora:
 - O prompt de cena agora reforça: *"manter a mesma identidade, cabelo, rosto e
   roupa da referência"*.
 
-### O que ainda vale revisar (opcional)
-- `phase1_script.py` (Gemini): o system prompt ainda diz "minimalist black line
-  art stickman, simple round head". Como a **identidade** é garantida pela imagem
-  de referência, isso não quebra a consistência — mas se quiser que o roteiro
-  descreva o Anderson explicitamente (gestos com a gravata etc.), dá pra ajustar.
+### Roteiro do Gemini (phase1_script.py) — já ajustado
+O system prompt do Gemini foi reescrito para o personagem **Anderson Patrimônio**
+(stickman de gravata, tema finanças/"surto financeiro", expressões de pânico) e,
+crucialmente, para **escrever a narração em português do Brasil** — senão a voz
+pt-BR do edge-tts leria texto em inglês. Detalhes:
+- `script` e `narration` saem em **pt-BR**; `title` e `scene_prompt` continuam em
+  inglês (é o que alimenta o Imagen).
+- Idioma configurável via `NARRATION_LANGUAGE` no `.env`.
+- `scene_prompt` descreve só a ação/props (a aparência do Anderson vem da imagem
+  de referência), com Anderson em situações exageradas ligadas a dinheiro.
 - **Fundo:** configurado para **creme** (casando com a arte do Anderson) via
   `CHARACTER_STYLE_CONSTRAINTS`. O `CHARACTER_NEGATIVE_PROMPT` bloqueia só cores
   no personagem (`colorful character, saturated colors`), deixando o fundo creme
